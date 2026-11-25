@@ -85,6 +85,11 @@ end
 ns.FollowQuest = Follow
 -- used by Quest Ledger Forever: point the arrow at the quest selected there
 function RallyPoint_FollowQuest(questID) Follow(questID, true) end
+-- used by Objective Forever: untracking a quest takes the arrow away
+function RallyPoint_StopFollow()
+    followed, followedDone = nil, nil
+    if ns.ClearWaypoint then ns.ClearWaypoint(true) end
+end
 
 -- Any other waypoint (e.g. clicking a quest in /dq) stops the quest-log following.
 local watcher = CreateFrame("Frame")

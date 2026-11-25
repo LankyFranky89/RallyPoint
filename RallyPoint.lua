@@ -1,3 +1,7 @@
+local function Secret(v) -- chat hidden by the game (or faked by /cc secret)
+  if CopyCatFakeSecret and CopyCatFakeSecret > GetTime() then return true end
+  return issecretvalue ~= nil and issecretvalue(v) == true
+end
 -- Rally Point: filters on top of Blizzard's Looking For Group browser (WoW Forever).
 -- Reads the results Blizzard's LFG tool already fetched; it never forms groups itself.
 local ADDON, ns = ...
@@ -288,7 +292,7 @@ local function Whisper(e)
 end
 
 local function OnWhisper(sender)
-  if not sender then return end
+  if not sender or Secret(sender) then return end
   local short = Ambiguate and Ambiguate(sender, "none") or sender
   for _, n in ipairs({ sender:lower(), short:lower() }) do
     local w = whispered[n]
@@ -532,6 +536,11 @@ local function Toggle()
   if window:IsShown() then window:Hide() else Rebuild(); window:Show(); Refresh() end
 end
 
+-- shared with Messenger.lua
+ns.results, ns.whispered = results, whispered
+ns.FamiliarInfo, ns.ClassIcon, ns.ClassColor = FamiliarInfo, ClassIcon, ClassColor
+ns.ROLE_ICON, ns.ROLE_NAME, ns.Print, ns.Translate = ROLE_ICON, ROLE_NAME, Print, Translate
+
 ------------------------------------------------------------------------
 -- Events & slash
 ------------------------------------------------------------------------
@@ -573,11 +582,13 @@ SlashCmdList.RALLYPOINT = function(input)
     Print(("Memory: %.1f MB"):format(GetAddOnMemoryUsage(ADDON) / 1024))
   elseif cmd == "clear" then
     if ns.ClearWaypoint then ns.ClearWaypoint() end
+  elseif cmd == "im" or cmd == "whispers" then
+    if ns.ToggleMessenger then ns.ToggleMessenger() end
   elseif cmd == "reset" then
     wipe(DB); for k, v in pairs(DEFAULTS) do DB[k] = type(v) == "table" and {} or v end
     Print("Settings reset."); if window then Refresh() end
   elseif cmd == "help" then
-    Print("/rally - open the window | /rally msg <text> - whisper message | /rally clear - remove the map waypoint | /rally reset | /dq - dungeon quests")
+    Print("/rally - open the window | /rally msg <text> - whisper message | /rally im - LFG whisper window | /rally demo - test it | /rally clear - remove the map waypoint | /rally reset | /dq - dungeon quests")
   else
     Toggle()
   end

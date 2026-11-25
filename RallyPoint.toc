@@ -2,12 +2,14 @@
 ## Title: Rally Point
 ## Notes: Filters for Blizzard's Looking For Group browser (role, class, level), members inline, match alerts, whisper helper. Includes Dungeon Dossier: dungeon quests in your log and to pick up (/dq) and map waypoints to quest givers and chain starts.
 ## Author: LankyFranky89
-## Version: 1.6.0
+## Version: 1.7.2
 ## SavedVariables: RallyPointDB, DungeonDossierDB
 ## OptionalDeps: FamiliarFaces, TrekTime, Lingua
 
 Dossier_Data.lua
 Dossier_Chains.lua
+Dossier_Forever.lua
 Waypoint.lua
 Dossier.lua
 RallyPoint.lua
+Messenger.lua

@@ -1,3 +1,7 @@
+local function Secret(v) -- chat hidden by the game (or faked by /cc secret)
+  if CopyCatFakeSecret and CopyCatFakeSecret > GetTime() then return true end
+  return issecretvalue ~= nil and issecretvalue(v) == true
+end
 -- Dungeon Dossier: shows the quests for a dungeon, both the ones in your log
 -- and the ones you could still pick up.
 local ADDON, ns = ...
@@ -52,6 +56,11 @@ local function UpdatePlayer()
 end
 
 local function IsDone(id)
+    if not id then return false end
+    if id >= 9900000 then                          -- Forever placeholder: use the learned real ID
+        id = ns.ForeverRealID and ns.ForeverRealID(id)
+        if not id then return false end
+    end
     if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
         return C_QuestLog.IsQuestFlaggedCompleted(id) and true or false
     elseif IsQuestFlaggedCompleted then
@@ -122,6 +131,7 @@ local function ScanQuestLog()
             end
         end
     end
+    if ns.ForeverMatchLog then ns.ForeverMatchLog(questLog) end
 end
 
 ---------------------------------------------------------------------------
@@ -207,7 +217,7 @@ local function QuestStatus(id, q)
             if not IsDone(p) then return "locked", "first do: " .. QuestName(p) end
         end
     end
-    if q.ps and #q.ps > 0 then
+    if q.ps and #q.ps > 0 and not q.fv then       -- Forever chains: shown as a note, never locked
         local ok = false
         for _, p in ipairs(q.ps) do if IsDone(p) then ok = true; break end end
         if not ok then return "locked", "first do: " .. QuestName(q.ps[1]) end
@@ -238,7 +248,7 @@ local function Collect(area)
     for header, entries in pairs(logHeaders) do
         if header == ns.Dungeons[area].name or ns.DetectDungeon(header) == area then
             for _, e in ipairs(entries) do
-                if not (e.id and seen[e.id]) then
+                if not (e.id and seen[e.id]) and not e.forever then
                     seen[e.id or e.title] = true
                     tinsert(res.log, { id = e.id, e = e })
                 end
@@ -362,6 +372,13 @@ local function RowEnter(self)
             GameTooltip:AddLine(StarterText(s, d.area), 0.8, 0.8, 0.8, true)
         end
         if d.why then GameTooltip:AddLine(d.why, 1, 0.3, 0.3, true) end
+        local fi = ns.ForeverInfo and ns.ForeverInfo[d.id]
+        if fi then
+            if fi.un then GameTooltip:AddLine("Needed to unlock / enter the dungeon", 1, 0.6, 0.2, true) end
+            if fi.nt and fi.nt ~= "" then GameTooltip:AddLine(fi.nt, 1, 1, 1, true) end
+            if fi.rw then GameTooltip:AddLine("Rewards: " .. table.concat(fi.rw, ", "), 0.6, 0.8, 1, true) end
+            if fi.vf then GameTooltip:AddLine("? Guides disagree on this one - check in game", 1, 0.6, 0.2, true) end
+        end
     end
     local w = WaypointFor(d.id, d.q, d.e, d.area)
     if w and w.note then GameTooltip:AddLine(w.note, 0.4, 1, 0.4, true) end
@@ -508,7 +525,9 @@ local function BuildLines(areas)
                 local s = starters[1]
                 local coords = (s and s.k ~= 3 and s.x and s.z) and { z = s.z, x = s.x, y = s.y, title = s.n } or nil
                 local extra = (#starters > 1) and format(" |cff999999(+%d more)|r", #starters - 1) or ""
-                tinsert(lines, { text = format("%s[%d] %s|r\n|cffbbbbbb%s%s|r", LevelColor(q.l), q.l, q.n,
+                local fi = ns.ForeverInfo and ns.ForeverInfo[it.id]
+                local tag = fi and ((fi.un and " |cffff9933[unlock]|r" or "") .. (fi.vf and " |cffff9933?|r" or "")) or ""
+                tinsert(lines, { text = format("%s[%d] %s|r%s\n|cffbbbbbb%s%s|r", LevelColor(q.l), q.l, q.n, tag,
                                  s and StarterText(s, area) or "Quest giver unknown", extra),
                                  indent = 10, data = { id = it.id, q = q, area = area, coords = coords } })
             end
@@ -581,6 +600,9 @@ local PHRASES = {
     { "zul gurub", 1977 }, { "onyxia's lair", 2159 }, { "ruins of ahn", 3429 }, { "temple of ahn", 3428 }, { "the stockade", 717 },
 }
 
+if ns.ForeverPhrases then for _, p in ipairs(ns.ForeverPhrases) do tinsert(PHRASES, p) end end
+if ns.ForeverKeywords then for k, v in pairs(ns.ForeverKeywords) do KEYWORDS[k] = KEYWORDS[k] or v end end
+
 local function DetectDungeon(msg)
     if not msg or msg == "" then return nil end
     local low = msg:lower()
@@ -614,9 +636,14 @@ end
 local lastInstance
 
 local function CurrentInstanceArea()
-    local _, itype, _, _, _, _, _, instanceID = GetInstanceInfo()
+    local iname, itype, _, _, _, _, _, instanceID = GetInstanceInfo()
     if itype == "party" or itype == "raid" then
-        return ns.InstanceToArea[instanceID], instanceID
+        local area = ns.InstanceToArea[instanceID]
+        if not area and iname then                 -- new Forever dungeons: match by name
+            area = DetectDungeon(iname)
+            if area then ns.InstanceToArea[instanceID] = area end
+        end
+        return area, instanceID
     end
     return nil, nil
 end
@@ -727,6 +754,7 @@ local GROUP_CHAT = {
 }
 
 local function OnChat(event, msg, sender)
+    if Secret(msg) or Secret(sender) then return end
     local s = ShortName(sender)
     local entry = { t = GetTime(), sender = s, msg = msg }
     if event == "CHAT_MSG_WHISPER_INFORM" then entry.sender = UnitName("player"); entry.to = s end
@@ -836,6 +864,7 @@ ev:SetScript("OnEvent", function(self, event, ...)
     elseif not DB then
         return
     elseif event == "PLAYER_LOGIN" then
+        if ns.ForeverResolveZones then ns.ForeverResolveZones() end
         wasGrouped = IsInGroup and IsInGroup() or false
         C_Timer.NewTicker(2, CheckEntrance)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -855,6 +884,10 @@ local ALIASES = {
     ["deadmines"] = 1581, ["stockade"] = 717, ["stockades"] = 717, ["sunken temple"] = 1477,
     ["temple of atal'hakkar"] = 1477, ["lower blackrock spire"] = 1583, ["upper blackrock spire"] = 1583,
     ["ahn'qiraj"] = 3428, ["ahn'qiraj temple"] = 3428,
+    -- WoW Forever
+    ["hall of thanes"] = 99001, ["lordaeron ruins"] = 99002, ["excavation site"] = 99003, ["wetlands excavation site"] = 99003,
+    ["dalaran"] = 99004, ["drowned city"] = 99005, ["alcaz island prison"] = 99007, ["alcaz prison"] = 99007,
+    ["shaper's terrace"] = 99009, ["shapers terrace"] = 99009,
 }
 local function Normalize(t)
     t = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("%b()", "")
