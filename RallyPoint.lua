@@ -380,6 +380,7 @@ function Refresh()
       local c = e.comment
       local tr = Translate(c)
       row.comment:SetText(tr and ("|cff99ff99" .. tr .. "|r") or c)
+      row.loot:SetShown(type(_G.Treasury_OpenDungeon) == "function")
       row:Show()
     else
       row:Hide()
@@ -516,6 +517,26 @@ local function BuildWindow()
     row.comment = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.comment:SetPoint("TOPRIGHT", -4, -4); row.comment:SetWidth(220)
     row.comment:SetJustifyH("RIGHT"); row.comment:SetWordWrap(false)
+    -- Treasury: small chest button opens the dungeon's loot
+    row.loot = CreateFrame("Button", nil, row)
+    row.loot:SetSize(16, 16)
+    row.loot:SetPoint("BOTTOMRIGHT", -4, 3)
+    row.loot:SetNormalTexture("Interface\\Icons\\INV_Box_02")
+    row.loot:GetNormalTexture():SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    row.loot:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    row.loot:SetScript("OnClick", function(self)
+      local e = self:GetParent().entry
+      if not e then return end
+      for _, n in ipairs(e.fullNames or {}) do if Treasury_OpenDungeon(n) then return end end
+      for _, n in ipairs(e.dungeons or {}) do if Treasury_OpenDungeon(n) then return end end
+      Print("Treasury has no loot table for " .. (e.dungeons[1] or "that dungeon") .. ".")
+    end)
+    row.loot:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine("Show loot in Treasury")
+      GameTooltip:Show()
+    end)
+    row.loot:SetScript("OnLeave", GameTooltip_Hide)
     row:SetScript("OnClick", function(self) if self.entry then Whisper(self.entry) end end)
     row:SetScript("OnEnter", Tooltip)
     row:SetScript("OnLeave", GameTooltip_Hide)
